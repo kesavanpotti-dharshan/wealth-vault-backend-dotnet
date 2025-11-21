@@ -34,14 +34,13 @@ public class AssetsController : ControllerBase
     {
         var asset = new Asset
         {
-            Type = dto.Type,
-            Name = dto.Name,
-            Value = dto.Value,
-            YearlyYield = dto.YearlyYield,
-            PurchaseDate = dto.PurchaseDate,
-            PurchaseValue = dto.PurchaseValue,
-            Qty = dto.Qty,
-            Ticker = dto.Ticker
+            AssetType = dto.AssetType,
+            AssetCategory = dto.AssetCategory,
+            AssetName = dto.AssetName,
+            AssetTotalValue = dto.AssetTotalValue,
+            AssetYield = dto.AssetYield,
+            LastUpdatedDate = dto.LastUpdatedDate,
+            AssetCurrency = dto.AssetCurrency
         };
         _context.Assets.Add(asset);
         await _context.SaveChangesAsync();
@@ -54,9 +53,14 @@ public class AssetsController : ControllerBase
         var asset = await _context.Assets.FindAsync(id);
         if (asset is null) return NotFound();
 
-        asset.Type = dto.Type;
-        asset.Name = dto.Name;
-        // ... map rest
+        asset.AssetType = dto.AssetType;
+        asset.AssetCategory = dto.AssetCategory;
+        asset.AssetName = dto.AssetName;
+        asset.AssetTotalValue = dto.AssetTotalValue;
+        asset.AssetYield = dto.AssetYield;
+        asset.LastUpdatedDate = dto.LastUpdatedDate;
+        asset.AssetCurrency = dto.AssetCurrency;
+        
         await _context.SaveChangesAsync();
         return NoContent();
     }

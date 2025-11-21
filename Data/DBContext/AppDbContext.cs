@@ -14,11 +14,8 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Asset>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Type).HasConversion<string>();
-            entity.HasData(  // Seed samples – convert your JS ones
-                new Asset { Id = 1, Type = AssetType.Bank, Name = "Chase Savings", Value = 75000, YearlyYield = 1200 },
-                new Asset { Id = 2, Type = AssetType.Crypto, Name = "Bitcoin", Ticker = "bitcoin", Qty = 1, PurchaseDate = DateOnly.FromDateTime(new DateTime(2025,1,20)), PurchaseValue = 12000 }
-            );
+            entity.Property(e => e.AssetType).HasConversion<string>();
+            entity.Property(e => e.AssetCategory).HasConversion<string>();
         });
     }
 }

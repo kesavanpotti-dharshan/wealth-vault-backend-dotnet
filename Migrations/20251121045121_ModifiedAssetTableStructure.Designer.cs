@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using WealthVaultApi.Data;
@@ -11,9 +12,11 @@ using WealthVaultApi.Data;
 namespace WealthVaultApi.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251121045121_ModifiedAssetTableStructure")]
+    partial class ModifiedAssetTableStructure
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -30,9 +33,8 @@ namespace WealthVaultApi.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("AssetCategory")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<int>("AssetCategory")
+                        .HasColumnType("integer");
 
                     b.Property<string>("AssetCurrency")
                         .HasColumnType("text");
