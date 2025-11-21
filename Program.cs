@@ -18,7 +18,7 @@ builder.Services.AddCors(options =>
     });
 });
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseInMemoryDatabase("WealthVaultDb"));  // Stub; swap UseSqlServer for Azure
+    options.UseNpgsql(builder.Configuration.GetConnectionString("WealthVaultDBConnString")));  // Stub; swap UseSqlServer for Azure
 
 
 var app = builder.Build();
