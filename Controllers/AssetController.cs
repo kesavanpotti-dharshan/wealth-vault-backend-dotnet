@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using WealthVaultApi.Data;
 using WealthVaultApi.Models;
 using WealthVaultApi.Dto;
+using WealthVaultApi.Data.DTO;
 
 namespace WealthVaultApi.Controllers;
 
@@ -102,5 +103,35 @@ public class AssetsController : ControllerBase
         await _context.SaveChangesAsync();
         _logger.LogInformation("Asset with id {AssetId} deleted successfully", id);
         return NoContent();
+    }
+    [HttpGet("GetAssetTypes")]
+    public async Task<ActionResult<IEnumerable<AssetTypes>>> GetAssetTypes()
+    {
+        _logger.LogInformation("Fetching all asset types");
+        var assetTypes = await _context.AssetTypes.ToListAsync();
+        _logger.LogDebug("Retrieved {Count} asset types", assetTypes.Count);
+        return Ok(assetTypes);
+    }
+    [HttpPost("CreateAssetType")]
+    public async Task<ActionResult<AssetTypes>> CreateAssetType(AssetTypeDto dto)
+    {
+        _logger.LogInformation("Creating new asset: {AssetName}", dto.AssetName);
+        var assetType = new AssetTypes
+        {
+            AssetName = dto.AssetName,
+            Description = dto.Description,
+            RiskLevel = dto.RiskLevel,
+            DefaultYield = dto.DefaultYield,
+            TaxAdvantaged = dto.TaxAdvantaged,
+            IsLiability = dto.IsLiability,
+            IsLiquid = dto.IsLiquid,
+            IsActive = dto.IsActive,
+            CreatedDate = dto.CreatedDate,
+            ModifiedDate = dto.ModifiedDate
+        };
+        _context.AssetTypes.Add(assetType);
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Asset type created successfully with id {AssetTypeId}", assetType.Id);
+        return CreatedAtAction(nameof(GetAssetTypes), new { id = assetType.Id }, assetType);
     }
 }

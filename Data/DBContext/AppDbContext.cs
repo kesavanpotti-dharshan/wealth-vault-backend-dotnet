@@ -6,6 +6,7 @@ namespace WealthVaultApi.Data;
 public class AppDbContext : DbContext
 {
     public DbSet<Asset> Assets { get; set; } = null!;
+    public DbSet<AssetTypes> AssetTypes { get; set; } = null!;
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -16,6 +17,10 @@ public class AppDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.AssetType).HasConversion<string>();
             entity.Property(e => e.AssetCategory).HasConversion<string>();
+        });
+        modelBuilder.Entity<AssetTypes>(entity =>
+        {
+            entity.HasKey(e => e.Id);
         });
     }
 }
