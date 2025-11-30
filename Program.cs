@@ -26,9 +26,12 @@ builder.Services.AddCors(options =>
 var allKeys = builder.Configuration.AsEnumerable().Select(x => x.Key);
 Console.WriteLine("All config keys: " + string.Join(", ", allKeys));
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("WealthVaultDBConnString")));  // Stub; swap UseSqlServer for Azure
+var connectionString = builder.Configuration.GetConnectionString("WealthVaultDBConnString")
+                    ?? builder.Configuration["POSTGRESQLCONNSTR_WealthVaultDBConnString"]
+                    ?? throw new InvalidOperationException("Database connection string not found!");
 
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(connectionString));  // Stub; swap UseSqlServer for Azure
 
 var app = builder.Build();
 
