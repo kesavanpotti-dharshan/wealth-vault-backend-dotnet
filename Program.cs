@@ -23,6 +23,9 @@ builder.Services.AddCors(options =>
               .AllowAnyHeader();
     });
 });
+var allKeys = builder.Configuration.AsEnumerable().Select(x => x.Key);
+Console.WriteLine("All config keys: " + string.Join(", ", allKeys));
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("WealthVaultDBConnString")));  // Stub; swap UseSqlServer for Azure
 
