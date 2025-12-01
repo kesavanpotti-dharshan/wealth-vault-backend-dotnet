@@ -15,8 +15,6 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Asset>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.AssetType).HasConversion<string>();
-            entity.Property(e => e.AssetCategory).HasConversion<string>();
         });
         modelBuilder.Entity<AssetTypes>(entity =>
         {

@@ -47,16 +47,51 @@ public class AssetsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<Asset>> CreateAsset(CreateAssetDto dto)
     {
-        _logger.LogInformation("Creating new asset: {AssetName}", dto.AssetName);
+        _logger.LogInformation("Creating new asset: {AssetName}", dto.Name);
+
+        // Validate that the AssetType exists and is active
+        var assetType = await _context.AssetTypes
+            .FirstOrDefaultAsync(t => t.Id == dto.AssetTypeId && t.IsActive);
+
+        if (assetType == null)
+            return BadRequest(new { error = "Invalid or inactive AssetTypeId" });
+
+        // Optional: Prevent liabilities from having positive yield (business rule)
+        if (assetType.IsLiability && dto.AnnualIncome > 0)
+            return BadRequest(new { error = "Liabilities cannot generate positive income" });
+
         var asset = new Asset
         {
-            AssetType = dto.AssetType,
-            AssetCategory = dto.AssetCategory,
-            AssetName = dto.AssetName,
-            AssetTotalValue = dto.AssetTotalValue,
-            AssetYield = dto.AssetYield,
-            LastUpdatedDate = dto.LastUpdatedDate,
-            AssetCurrency = dto.AssetCurrency
+            AssetTypeId = dto.AssetTypeId,
+            AssetType = assetType, // Navigation property (optional but nice for response)
+
+            AssetName = dto.Name.Trim(),
+            Ticker = dto.Ticker?.Trim().ToUpperInvariant(),
+
+            // Value handling — smart logic
+            CurrentValue = dto.CurrentValue ?? 0m,
+            Quantity = dto.Quantity,
+            PurchasePricePerUnit = dto.PurchasePricePerUnit,
+            CostBasis = dto.CostBasis ?? (dto.Quantity.HasValue && dto.PurchasePricePerUnit.HasValue
+            ? dto.Quantity.Value * dto.PurchasePricePerUnit.Value
+            : null),
+
+            // Income — the heart of Arca Nostra
+            AnnualIncome = dto.AnnualIncome ?? 0m,
+            YieldPercentage = dto.YieldPercentage,
+            IncomeFrequency = dto.IncomeFrequency ?? IncomeFrequency.Annually,
+
+            // Dates
+            PurchaseDate = dto.PurchaseDate,
+            LastIncomeDate = dto.LastIncomeDate,
+            NextIncomeDate = dto.NextIncomeDate,
+            LastUpdated = DateTime.UtcNow,
+
+            // Metadata
+            Currency = dto.Currency ?? "USD",
+            Country = dto.Country,
+            Notes = dto.Notes?.Trim(),
+            IsActive = true
         };
         _context.Assets.Add(asset);
         await _context.SaveChangesAsync();
@@ -64,28 +99,88 @@ public class AssetsController : ControllerBase
         return CreatedAtAction(nameof(GetAsset), new { id = asset.Id }, asset);
     }
 
-    [HttpPut("{id}")]
-    public async Task<IActionResult> UpdateAsset(int id, CreateAssetDto dto)  // Reuse DTO for simplicity
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> UpdateAsset(int id, [FromBody] CreateAssetDto dto)
     {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
         _logger.LogInformation("Updating asset with id {AssetId}", id);
-        var asset = await _context.Assets.FindAsync(id);
+
+        var asset = await _context.Assets
+            .Include(a => a.AssetType)
+            .FirstOrDefaultAsync(a => a.Id == id && a.IsActive);
+
         if (asset is null)
         {
-            _logger.LogWarning("Asset with id {AssetId} not found for update", id);
-            return NotFound();
+            _logger.LogWarning("Asset with id {AssetId} not found or inactive", id);
+            return NotFound(new { error = "Asset not found or has been deactivated" });
         }
 
-        asset.AssetType = dto.AssetType;
-        asset.AssetCategory = dto.AssetCategory;
-        asset.AssetName = dto.AssetName;
-        asset.AssetTotalValue = dto.AssetTotalValue;
-        asset.AssetYield = dto.AssetYield;
-        asset.LastUpdatedDate = dto.LastUpdatedDate;
-        asset.AssetCurrency = dto.AssetCurrency;
-        
-        await _context.SaveChangesAsync();
-        _logger.LogInformation("Asset with id {AssetId} updated successfully", id);
-        return NoContent();
+        // Validate AssetType exists and is active
+        var newAssetType = await _context.AssetTypes
+            .FirstOrDefaultAsync(t => t.Id == dto.AssetTypeId && t.IsActive);
+
+        if (newAssetType == null)
+            return BadRequest(new { error = "Invalid or inactive AssetTypeId" });
+
+        // Business rule: Liabilities can't generate positive income
+        if (newAssetType.IsLiability && (dto.AnnualIncome > 0 || (dto.YieldPercentage.HasValue && dto.YieldPercentage > 0)))
+            return BadRequest(new { error = "Liabilities cannot generate positive income" });
+
+        // Update all fields
+        asset.AssetTypeId = dto.AssetTypeId;
+        asset.AssetType = newAssetType;
+
+        asset.AssetName = dto.Name.Trim();
+        asset.Ticker = dto.Ticker?.Trim().ToUpperInvariant();
+
+        // Value updates
+        asset.CurrentValue = dto.CurrentValue ?? asset.CurrentValue;
+        asset.Quantity = dto.Quantity ?? asset.Quantity;
+        asset.PurchasePricePerUnit = dto.PurchasePricePerUnit ?? asset.PurchasePricePerUnit;
+
+        // Smart CostBasis recalculation (only if inputs provided)
+        if (dto.Quantity.HasValue || dto.PurchasePricePerUnit.HasValue)
+        {
+            var qty = dto.Quantity ?? asset.Quantity ?? 0m;
+            var price = dto.PurchasePricePerUnit ?? asset.PurchasePricePerUnit ?? 0m;
+            asset.CostBasis = qty * price;
+        }
+        else if (dto.CostBasis.HasValue)
+        {
+            asset.CostBasis = dto.CostBasis.Value;
+        }
+
+        // Income updates
+        asset.AnnualIncome = dto.AnnualIncome ?? asset.AnnualIncome ?? 0m;
+        asset.YieldPercentage = dto.YieldPercentage ?? asset.YieldPercentage;
+        asset.IncomeFrequency = dto.IncomeFrequency ?? asset.IncomeFrequency;
+
+        // Dates
+        asset.PurchaseDate = dto.PurchaseDate ?? asset.PurchaseDate;
+        asset.LastIncomeDate = dto.LastIncomeDate ?? asset.LastIncomeDate;
+        asset.NextIncomeDate = dto.NextIncomeDate ?? asset.NextIncomeDate;
+
+        // Metadata
+        asset.Currency = dto.Currency ?? asset.Currency;
+        asset.Country = dto.Country ?? asset.Country;
+        asset.Notes = dto.Notes?.Trim() ?? asset.Notes;
+
+        // Always update timestamp
+        asset.LastUpdated = DateTime.UtcNow;
+
+        try
+        {
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("Asset {AssetId} updated successfully", id);
+            return NoContent(); // 204 — standard for successful PUT
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogError(ex, "Database error updating asset {AssetId}", id);
+            return StatusCode(500, new { error = "Failed to update asset" });
+        }
     }
 
     [HttpDelete("{id}")]
@@ -133,5 +228,92 @@ public class AssetsController : ControllerBase
         await _context.SaveChangesAsync();
         _logger.LogInformation("Asset type created successfully with id {AssetTypeId}", assetType.Id);
         return CreatedAtAction(nameof(GetAssetTypes), new { id = assetType.Id }, assetType);
+    }
+    [HttpGet("summary")]
+    public async Task<ActionResult<AssetSummaryDto>> GetAssetSummary()
+    {
+        var assets = await _context.Assets
+            .Include(a => a.AssetType)
+            .Where(a => a.IsActive) // only active assets
+            .ToListAsync();
+
+        // Mock real-time prices (replace with real API later)
+        var priceCache = new Dictionary<string, decimal>
+        {
+            ["bitcoin"] = 108900m,
+            ["ethereum"] = 4920m,
+            ["vti"] = 301m,
+            ["aapl"] = 238m
+        };
+
+        decimal totalNetWorth = 0m;
+        decimal totalAnnualIncome = 0m;
+        var incomeGenerators = new List<IncomeGeneratorDto>();
+
+        foreach (var asset in assets)
+        {
+            // Calculate current market value
+            decimal currentValue = asset.AssetType?.IsLiability == true
+                ? -(asset.CurrentValue ?? 0m)
+                : !string.IsNullOrEmpty(asset.Ticker)
+                    ? (asset.Quantity ?? 1m) * priceCache.GetValueOrDefault(asset.Ticker.ToLower(), asset.CurrentValue ?? 0m)
+                    : asset.CurrentValue ?? 0m;
+
+            totalNetWorth += currentValue;
+
+            // Income calculation
+            decimal annualIncome = asset.AnnualIncome ??
+                (asset.CurrentValue ?? 0m) * (asset.YieldPercentage ?? 0m) / 100m;
+
+            if (annualIncome > 0)
+            {
+                decimal monthlyIncome = annualIncome / 12m;
+
+                totalAnnualIncome += annualIncome;
+
+                incomeGenerators.Add(new IncomeGeneratorDto
+                {
+                    AssetId = asset.Id,
+                    AssetName = asset.AssetName,
+                    AssetType = asset.AssetType?.AssetName ?? "Unknown",
+                    AnnualIncome = annualIncome,
+                    MonthlyIncome = monthlyIncome
+                });
+            }
+        }
+
+        // Final calculations
+        decimal monthlyPassiveIncome = totalAnnualIncome / 12m;
+        decimal portfolioYield = totalNetWorth > 0
+            ? (totalAnnualIncome / totalNetWorth) * 100m
+            : 0m;
+
+        var topGenerators = incomeGenerators
+            .OrderByDescending(x => x.AnnualIncome)
+            .Take(5)
+            .Select((g, i) => new IncomeGeneratorDto
+            {
+                Rank = i + 1,
+                AssetId = g.AssetId,
+                AssetName = g.AssetName,
+                AssetType = g.AssetType,
+                AnnualIncome = g.AnnualIncome,
+                MonthlyIncome = g.MonthlyIncome,
+                PercentageOfTotal = totalAnnualIncome > 0 ? (g.AnnualIncome / totalAnnualIncome) * 100m : 0m
+            })
+            .ToList();
+
+        var response = new AssetSummaryDto
+        {
+            TotalNetWorth = Math.Round(totalNetWorth, 2),
+            MonthlyPassiveIncome = Math.Round(monthlyPassiveIncome, 2),
+            TotalAnnualIncome = Math.Round(totalAnnualIncome, 2),
+            PortfolioYield = Math.Round(portfolioYield, 2),
+            AssetCount = assets.Count,
+            TopIncomeGenerators = topGenerators,
+            GeneratedAt = DateTime.UtcNow
+        };
+
+        return Ok(response);
     }
 }
