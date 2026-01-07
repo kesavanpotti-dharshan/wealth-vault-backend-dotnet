@@ -232,6 +232,7 @@ public class AssetsController : ControllerBase
     [HttpGet("summary")]
     public async Task<ActionResult<AssetSummaryDto>> GetAssetSummary()
     {
+        _logger.LogInformation("Generating asset summary report");
         var assets = await _context.Assets
             .Include(a => a.AssetType)
             .Where(a => a.IsActive) // only active assets
@@ -252,12 +253,40 @@ public class AssetsController : ControllerBase
 
         foreach (var asset in assets)
         {
-            // Calculate current market value
-            decimal currentValue = asset.AssetType?.IsLiability == true
-                ? -(asset.CurrentValue ?? 0m)
-                : !string.IsNullOrEmpty(asset.Ticker)
-                    ? (asset.Quantity ?? 1m) * priceCache.GetValueOrDefault(asset.Ticker.ToLower(), asset.CurrentValue ?? 0m)
-                    : asset.CurrentValue ?? 0m;
+            _logger.LogInformation("Processing asset {AssetName} (ID: {AssetId})", asset.AssetName, asset.Id);            
+            
+            decimal computedValue = 0m;
+            var tickerKey = asset.Ticker?.ToLower() ?? string.Empty;
+            _logger.LogInformation("Calculating value for asset with ticker {Ticker}", tickerKey);
+            _logger.LogInformation("Asset details: Quantity={Quantity}, CurrentValue={CurrentValue}, AssetType={AssetType}",
+                asset.Quantity, asset.CurrentValue, asset.AssetType?.AssetName ?? "Not Available");
+
+            computedValue = asset.AssetType switch
+            {
+                // For stocks/crypto, use quantity * current market price
+                AssetTypes at when at.AssetName.Equals("Stock", StringComparison.OrdinalIgnoreCase) ||
+                                 at.AssetName.Equals("Cryptocurrency", StringComparison.OrdinalIgnoreCase) =>
+                    (asset.Quantity ?? 0m) * priceCache.GetValueOrDefault(tickerKey, asset.CurrentValue ?? 0m),
+
+                // For cash or fixed value assets, use current value directly
+                AssetTypes at when at.AssetName.Equals("Cash", StringComparison.OrdinalIgnoreCase) ||
+                                 at.AssetName.Equals("Bond", StringComparison.OrdinalIgnoreCase) =>
+                    asset.CurrentValue ?? 0m,
+                
+                AssetTypes at when at.AssetName.Equals("High-Yield Savings", StringComparison.OrdinalIgnoreCase) =>
+                    (asset.Quantity ?? 0m) * (asset.CurrentValue ?? 0m) * ((asset.YieldPercentage ?? 0m) / 100m),
+
+                // Default fallback
+                _ => asset.CurrentValue ?? 0m,
+            };
+
+            _logger.LogInformation("Computed value for asset {AssetName} is {ComputedValue}", asset.AssetName, computedValue);
+
+            // Apply sign for liabilities
+            decimal currentValue = asset.AssetType?.IsLiability == true ? -computedValue : computedValue;
+
+            _logger.LogInformation("{Quantity} units of {Ticker} valued at {UnitPrice} each gives current value {CurrentValue}",
+                asset.Quantity, asset.Ticker, priceCache.GetValueOrDefault(tickerKey, asset.CurrentValue ?? 0m), currentValue);
 
             totalNetWorth += currentValue;
 

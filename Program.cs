@@ -1,8 +1,18 @@
 using Microsoft.EntityFrameworkCore;
+using Serilog;
 using System.Text.Json.Serialization;
 using WealthVaultApi.Data;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure Serilog for logging
+builder.Host.UseSerilog((context, loggerConfig) =>
+    loggerConfig
+        .MinimumLevel.Information()
+        .WriteTo.Console()
+        .Enrich.FromLogContext()
+        .Enrich.WithProperty("Application", "WealthVaultApi")
+);
 
 // Add services to the container.
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
